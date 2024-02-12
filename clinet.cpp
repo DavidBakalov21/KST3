@@ -3,21 +3,44 @@
 #include <string>
 #include <winsock2.h>
 #include <Ws2tcpip.h>
-
+#include <vector>
 
 #pragma comment(lib, "ws2_32.lib")
 
+void sendText(const std::string& text, const int clientSocket)
+{
+    int textLength = text.size();
+    send(clientSocket, (char*)&textLength, sizeof(int), 0);
+    send(clientSocket, text.c_str(), textLength, 0);
+}
+
+std::string receiveText(const int clientSocket)
+{
+    int textLenght;
+    int bytesReceived = recv(clientSocket, (char*)&textLenght, sizeof(int), 0);
+    if (bytesReceived > 0) {
+        std::vector<char> textBuffer(textLenght);
+        recv(clientSocket, textBuffer.data(), textLenght, 0);
+        return std::string(textBuffer.begin(), textBuffer.end());
+    }
+    else if (bytesReceived <= 0) {
+        closesocket(clientSocket); //maybe will remove
+        return "error";
+    }
+}
+
 void receiveMessages(SOCKET clientSocket) {
-    char buffer[4096];
+    //char buffer[4096];
     while (true) {
-        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesReceived <= 0) {
+        std::string message=receiveText(clientSocket);
+      //  int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (message =="error") {
             std::cerr << "Server disconnected.\n";
             break;
         }
 
-        buffer[bytesReceived] = '\0';
-        std::cout << "Server: " << buffer << std::endl;
+        //buffer[bytesReceived] = '\0';
+        std::cout << "Server: " << message << std::endl;
     }
 }
 
@@ -57,9 +80,11 @@ int main() {
     std::string roomChoice;
     std::cout << "Select chat room(1,2,3,4,5).\n";
     std::getline(std::cin, roomChoice);
+    sendText(roomChoice, clientSocket);
     while (true) {
         std::getline(std::cin, message);
-        send(clientSocket, message.c_str(), message.size() + 1, 0);
+        sendText(message, clientSocket);
+        //send(clientSocket, message.c_str(), message.size() + 1, 0);
     }
 
     // Close the socket and clean up

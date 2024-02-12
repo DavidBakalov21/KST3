@@ -3,12 +3,13 @@
 #include <vector>
 #include <string>
 #include <mutex>
+#include <sstream>
 #include <winsock2.h>
 #include <map>
 #pragma comment(lib, "ws2_32.lib")
 
 std::mutex consoleMutex;
-std::vector<SOCKET> clients;
+//std::vector<SOCKET> clients;
 std::vector<SOCKET> room1;
 std::vector<SOCKET> room2;
 std::vector<SOCKET> room3;
@@ -16,33 +17,68 @@ std::vector<SOCKET> room4;
 std::vector<SOCKET> room5;
 std::map<std::string, std::vector<SOCKET>> roomset;
 
+void sendText(const std::string& text, const int clientSocket)
+{
+    int textLength = text.size();
+    send(clientSocket, (char*)&textLength, sizeof(int), 0);
+    send(clientSocket, text.c_str(), textLength, 0);
+}
 
-void broadcastMessage(const std::string& message, SOCKET senderSocket) {
+std::string receiveText(const int clientSocket)
+{
+    int textLenght;
+    int bytesReceived = recv(clientSocket, (char*)&textLenght, sizeof(int), 0);
+    if (bytesReceived > 0) {
+        std::vector<char> textBuffer(textLenght);
+        recv(clientSocket, textBuffer.data(), textLenght, 0);
+        return std::string(textBuffer.begin(), textBuffer.end());
+    }
+    else if (bytesReceived <= 0) {
+        closesocket(clientSocket);
+        return "error";
+    }
+}
+
+void broadcastMessage(const std::string& message, SOCKET senderSocket, std::string roomNum) {
     std::lock_guard<std::mutex> lock(consoleMutex);
     std::cout << "Client " << senderSocket << ": " << message << std::endl;
 
-    for (SOCKET client : clients) {
+    for (SOCKET client : roomset[roomNum]) {
         if (client != senderSocket) {
-            send(client, message.c_str(), message.size() + 1, 0);
+            sendText(message, client);
         }
     }
 }
 
 void handleClient(SOCKET clientSocket) {
-    clients.push_back(clientSocket);
-
-    char buffer[4096];
+    std::string roomNum = receiveText(clientSocket);
+    roomset[roomNum].push_back(clientSocket);
     while (true) {
-        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesReceived <= 0) {
+        std::string message = receiveText(clientSocket);
+        std::vector<std::string> tokens;
+        std::string token;
+        std::istringstream tokenStream(message);
+
+        while (std::getline(tokenStream, token, ' ')) {
+            tokens.push_back(token);
+        }
+        if (tokens[0] == "REJOIN") {
+            for (int i = 0; i < roomset[roomNum].size(); i++)
+            {
+                if (roomset[roomNum][i] == clientSocket) {
+                    roomset[roomNum].erase(roomset[roomNum].begin()+i);
+                    break;
+                }
+            }
+            roomNum = tokens[1];
+            roomset[roomNum].push_back(clientSocket);
+        }
+        if (message == "error") {
             std::lock_guard<std::mutex> lock(consoleMutex);
             std::cout << "Client " << clientSocket << " disconnected.\n";
             break;
         }
-
-        buffer[bytesReceived] = '\0';
-        std::string message(buffer);
-        broadcastMessage(message, clientSocket);
+        broadcastMessage(message, clientSocket,roomNum);
     }
 
     closesocket(clientSocket);
