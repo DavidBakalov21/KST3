@@ -60,8 +60,6 @@ void addMessageToQueue(const Message& message) {
 }
 void PutToClient(const int clientSocket, std::string name)
 {
-	//std::string name = receiveText(clientSocket);
-
 	std::string filepath = "C:\\Users\\Давід\\source\\repos\\Te\\ClientServer2\\ClientServer2\\" + name;
 	std::ifstream file(filepath, std::ios::binary | std::ios::ate);
 	std::streamsize fileSize = file.tellg();
@@ -94,7 +92,7 @@ void broadcastMessage(const std::string& message, SOCKET senderSocket, std::stri
 				sendText(std::to_string(senderSocket), client);
 				sendText("FILEINCOMING", client);
 				sendText(message, client);
-				PutToClient(client,message);
+				PutToClient(client, message);
 			}
 		}
 	}
@@ -124,14 +122,6 @@ void GetFromClient(const int clientSocket)
 		std::cout << WSAGetLastError() << std::endl;
 
 	}
-	/*if (!std::filesystem::create_directory("C:\\Users\\Давід\\source\\repos\\Te\\ClientServer2\\ClientServer2\\" + std::to_string(clientSocket)))
-	{
-		m.lock();
-		std::cout << "Directory already exists" << std::endl;
-		m.unlock();
-	}
-	*/
-	//std::ofstream outFile("C:\\Users\\Давід\\source\\repos\\Te\\ClientServer2\\ClientServer2\\" + std::to_string(clientSocket) + "\\" + name, std::ios::binary);
 	std::ofstream outFile("C:\\Users\\Давід\\source\\repos\\Te\\ClientServer2\\ClientServer2\\" + name, std::ios::binary);
 	std::streamsize totalReceived = 0;
 	while (totalReceived < fileSize)
@@ -179,14 +169,14 @@ void handleClient(SOCKET clientSocket) {
 
 			GetFromClient(clientSocket);
 			std::string flag = "file";
-			Message mes{ tokens[1], clientSocket, roomNum, flag};
+			Message mes{ tokens[1], clientSocket, roomNum, flag };
 			addMessageToQueue(mes);
 		}
 		else {
-			Message mes{ message, clientSocket, roomNum, "text"};
+			Message mes{ message, clientSocket, roomNum, "text" };
 			addMessageToQueue(mes);
 		}
-		
+
 	}
 	closesocket(clientSocket);
 }

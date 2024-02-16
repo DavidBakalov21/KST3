@@ -12,6 +12,9 @@
 #pragma comment(lib, "ws2_32.lib")
 std::mutex consoleMutex;
 std::mutex m;
+std::mutex finalM;
+
+
 const int BUFSIZE = 2500;
 //std::vector<SOCKET> clients;
 std::vector<SOCKET> room1;
@@ -30,6 +33,10 @@ struct Message {
 std::mutex messageQueueMutex;
 std::condition_variable messageAvailableCondition;
 std::queue<Message> messageQueue;
+
+std::mutex AcceptMutex;
+std::condition_variable AcceptCondition;
+std::string acceptFlag = "";
 void sendText(const std::string& text, const int clientSocket)
 {
 	int textLength = text.size();
@@ -92,7 +99,14 @@ void broadcastMessage(const std::string& message, SOCKET senderSocket, std::stri
 				sendText(std::to_string(senderSocket), client);
 				sendText("FILEINCOMING", client);
 				sendText(message, client);
-				PutToClient(client, message);
+				std::unique_lock<std::mutex> lock(AcceptMutex);
+				AcceptCondition.wait(lock, [] { return acceptFlag != ""; });
+				if (acceptFlag=="y")
+				{
+					PutToClient(client, message);
+				}
+				
+				acceptFlag = "";
 			}
 		}
 	}
@@ -154,6 +168,7 @@ void handleClient(SOCKET clientSocket) {
 			break;
 		}
 		if (tokens[0] == "REJOIN") {
+			finalM.lock();
 			for (int i = 0; i < roomset[roomNum].size(); i++)
 			{
 				if (roomset[roomNum][i] == clientSocket) {
@@ -163,6 +178,7 @@ void handleClient(SOCKET clientSocket) {
 			}
 			roomNum = tokens[1];
 			roomset[roomNum].push_back(clientSocket);
+			finalM.unlock();
 		}
 		if (tokens[0] == "FILE")
 		{
@@ -171,6 +187,13 @@ void handleClient(SOCKET clientSocket) {
 			std::string flag = "file";
 			Message mes{ tokens[1], clientSocket, roomNum, flag };
 			addMessageToQueue(mes);
+		}
+		if (tokens[0]=="n" || tokens[0] == "y")
+		{
+			std::unique_lock<std::mutex> lock(AcceptMutex);
+			acceptFlag = tokens[0];
+			
+			AcceptCondition.notify_one();
 		}
 		else {
 			Message mes{ message, clientSocket, roomNum, "text" };

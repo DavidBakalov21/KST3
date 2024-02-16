@@ -7,9 +7,22 @@
 #include <sstream>
 #include <filesystem>
 #include <vector>
-
+#include<mutex>
 #pragma comment(lib, "ws2_32.lib")
 const int BUFSIZE = 2500;
+std::mutex m;
+std::string flag = "";
+std::mutex consoleMutex;
+
+std::mutex dataMutex;
+std::condition_variable dataCondition;
+std::string UserInput() {
+	m.lock();
+	std::string input;
+	std::getline(std::cin, input);
+	m.unlock();
+	return input;
+}
 void sendText(const std::string& text, const int clientSocket)
 {
 	int textLength = text.size();
@@ -31,22 +44,16 @@ std::string receiveText(const int clientSocket)
 		return "error";
 	}
 }
-void GetF(const std::string& name, const int clientSocket)
+void GetF(const std::string& name, const int clientSocket, std::string& choice)
 {
-	//sendText(choice);
-	//sendText(name, clientSocket);
 	std::streamsize fileSize;
 	if (recv(clientSocket, (char*)&fileSize, sizeof(std::streamsize), 0) == SOCKET_ERROR)
 	{
 		std::cout << "something went wrong when receiving file size" << std::endl;
 		std::cout << WSAGetLastError() << std::endl;
 	}
-	std::cout << "File size is:" << fileSize << std::endl;
 	if (!std::filesystem::create_directory("C:\\Users\\Давід\\source\\repos\\Te\\ClientChat2\\ClientChat2\\" + std::to_string(clientSocket)))
 	{
-		//m.lock();
-		//std::cout << "Directory already exists" << std::endl;
-		
 	}
 	std::ofstream outFile("C:\\Users\\Давід\\source\\repos\\Te\\ClientChat2\\ClientChat2\\" + std::to_string(clientSocket) + "\\" + name, std::ios::binary);
 	std::streamsize totalReceived = 0;
@@ -54,11 +61,21 @@ void GetF(const std::string& name, const int clientSocket)
 	{
 		char buffer[BUFSIZE];
 		std::streamsize bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-		outFile.write(buffer, bytesReceived);
+		if (choice == "y") {
+			outFile.write(buffer, bytesReceived);
+		}
 		totalReceived += bytesReceived;
-		std::cout << "current file size:" << totalReceived << std::endl;
+		if (choice == "y") {
+			std::cout << "current file size:" << totalReceived << std::endl;
+		}
 	}
 	outFile.close();
+	if (choice!="y")
+	{
+		std::string filepath = "C:\\Users\\Давід\\source\\repos\\Te\\ClientChat2\\ClientChat2\\" + std::to_string(clientSocket) + "\\" + name;
+		remove(filepath.c_str());
+	}
+	
 }
 void receiveMessages(SOCKET clientSocket) {
 	while (true) {
@@ -69,20 +86,36 @@ void receiveMessages(SOCKET clientSocket) {
 			break;
 		}
 		if (message == "FILEINCOMING") {
-			std::cout << "Incommming file decline/accept" << std::endl;
+			consoleMutex.lock();
+			std::cout << "Incommming file from "<<user<<" y/n" << std::endl;
+			consoleMutex.unlock();
 			std::string name = receiveText(clientSocket);
-			GetF(name, clientSocket);
+			std::unique_lock<std::mutex> lock(dataMutex);
+			dataCondition.wait(lock, [] { return flag != ""; });
+			//std::string choice = UserInput();
+		
+			//	
+			GetF(name, clientSocket, flag);
+			if (flag != "y"){
+				consoleMutex.lock();
+				std::cout << "rejected" << std::endl;
+				consoleMutex.unlock();
+			}
+		
+			flag = "";
 		}
 		else {
+			consoleMutex.lock();
 			std::cout << "User " << user << ":" << message << std::endl;
+			consoleMutex.unlock();
 		}
 	}
 }
 void SendFile(const std::string& name, const int clientSocket)
 {
-	sendText("FILE "+name, clientSocket);
+	sendText("FILE " + name, clientSocket);
 	sendText(name, clientSocket);
-	std::string filepath =  name;
+	std::string filepath = name;
 	std::ifstream file(filepath, std::ios::binary | std::ios::ate);
 	std::streamsize fileSize = file.tellg();
 	file.seekg(0, std::ios::beg);
@@ -95,16 +128,13 @@ void SendFile(const std::string& name, const int clientSocket)
 		std::streamsize currentChunkSize = (remaining < BUFSIZE) ? remaining : BUFSIZE;
 		file.read(buffer, currentChunkSize);
 		send(clientSocket, buffer, currentChunkSize, 0);
-		std::cout << "Chunk size is:" << currentChunkSize << std::endl;
+		//std::cout << "Chunk size is:" << currentChunkSize << std::endl;
 		totalSent += currentChunkSize;
 	}
 	file.close();
-	//std::string confirmation = receiveText();
-	//std::cout << confirmation << std::endl;
 }
 
 
-//FILE name
 int main() {
 	WSADATA wsaData;
 	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -137,7 +167,7 @@ int main() {
 	sendText(roomChoice, clientSocket);
 	while (true) {
 
-		std::getline(std::cin, message);
+		message = UserInput();
 		std::vector<std::string> tokens;
 		std::string token;
 		std::istringstream tokenStream(message);
@@ -147,12 +177,17 @@ int main() {
 		}
 		if (tokens[0] == "FILE") {
 			SendFile(tokens[1], clientSocket);
+			
+		}else if (tokens[0]=="y" || tokens[0]=="n") {
+			std::unique_lock<std::mutex> lock(dataMutex);
+			flag = tokens[0];
+			dataCondition.notify_one();
 		}
 		else {
 			sendText(message, clientSocket);
 		}
-		
-		
+
+
 	}
 	closesocket(clientSocket);
 	WSACleanup();

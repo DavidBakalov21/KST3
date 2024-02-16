@@ -44,7 +44,7 @@ std::string receiveText(const int clientSocket)
 		return "error";
 	}
 }
-void GetF(const std::string& name, const int clientSocket, std::string& choice)
+void GetF(const std::string& name, const int clientSocket)
 {
 	std::streamsize fileSize;
 	if (recv(clientSocket, (char*)&fileSize, sizeof(std::streamsize), 0) == SOCKET_ERROR)
@@ -61,20 +61,13 @@ void GetF(const std::string& name, const int clientSocket, std::string& choice)
 	{
 		char buffer[BUFSIZE];
 		std::streamsize bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-		if (choice == "y") {
 			outFile.write(buffer, bytesReceived);
-		}
 		totalReceived += bytesReceived;
-		if (choice == "y") {
 			std::cout << "current file size:" << totalReceived << std::endl;
-		}
+		
 	}
 	outFile.close();
-	if (choice!="y")
-	{
-		std::string filepath = "C:\\Users\\Давід\\source\\repos\\Te\\ClientChat2\\ClientChat2\\" + std::to_string(clientSocket) + "\\" + name;
-		remove(filepath.c_str());
-	}
+
 	
 }
 void receiveMessages(SOCKET clientSocket) {
@@ -92,10 +85,10 @@ void receiveMessages(SOCKET clientSocket) {
 			std::string name = receiveText(clientSocket);
 			std::unique_lock<std::mutex> lock(dataMutex);
 			dataCondition.wait(lock, [] { return flag != ""; });
-			//std::string choice = UserInput();
-		
-			//	
-			GetF(name, clientSocket, flag);
+			if (flag == "y")
+			{
+				GetF(name, clientSocket);
+			}
 			if (flag != "y"){
 				consoleMutex.lock();
 				std::cout << "rejected" << std::endl;
@@ -181,6 +174,7 @@ int main() {
 		}else if (tokens[0]=="y" || tokens[0]=="n") {
 			std::unique_lock<std::mutex> lock(dataMutex);
 			flag = tokens[0];
+			sendText(flag, clientSocket);
 			dataCondition.notify_one();
 		}
 		else {
