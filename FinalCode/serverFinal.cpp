@@ -12,7 +12,7 @@
 #pragma comment(lib, "ws2_32.lib")
 std::mutex consoleMutex;
 std::mutex m;
-std::mutex finalM;
+std::mutex RoomMtx;
 
 
 const int BUFSIZE = 2500;
@@ -168,7 +168,7 @@ void handleClient(SOCKET clientSocket) {
 			break;
 		}
 		if (tokens[0] == "REJOIN") {
-			finalM.lock();
+			RoomMtx.lock();
 			for (int i = 0; i < roomset[roomNum].size(); i++)
 			{
 				if (roomset[roomNum][i] == clientSocket) {
@@ -178,7 +178,7 @@ void handleClient(SOCKET clientSocket) {
 			}
 			roomNum = tokens[1];
 			roomset[roomNum].push_back(clientSocket);
-			finalM.unlock();
+			RoomMtx.unlock();
 		}
 		if (tokens[0] == "FILE")
 		{
